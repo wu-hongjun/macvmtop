@@ -38,7 +38,7 @@ are currently ad-hoc signed, not Developer ID signed or notarized.
 
 | Area | Source | Meaning |
 | --- | --- | --- |
-| VM identity | `sysctl` | Guest-reported model, kernel, CPU brand, CPU counts, memory size |
+| VM identity | `sysctl` | Guest-reported machine name, model, kernel, CPU brand, CPU counts, memory size |
 | vCPU usage | `host_processor_info(PROCESSOR_CPU_LOAD_INFO)` | Per assigned virtual CPU, sampled by counter deltas |
 | Load average | `getloadavg` | Guest scheduler load |
 | Memory and VM counters | `host_statistics64(HOST_VM_INFO64)`, `hw.memsize` | Guest memory pressure, pages, compressor, pageins/pageouts, swap counters |
@@ -166,7 +166,8 @@ target/debug/macvmtop update
 
 `macvmtop json` returns:
 
-- `machine`: guest-reported model, CPU, kernel, CPU counts, memory, VM detection
+- `machine`: guest-reported name, model, CPU, kernel, CPU counts, memory, VM
+  detection
 - `available`: metrics `macvmtop` can collect and the API source for each
 
 `macvmtop json --sample` returns:

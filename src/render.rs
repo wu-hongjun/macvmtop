@@ -14,6 +14,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState, Wrap};
 use std::io::{self, Stdout, Write};
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 pub struct Tui {
     terminal: Terminal<CrosstermBackend<Stdout>>,
 }
@@ -120,6 +122,7 @@ pub fn print_once(
 
 pub fn print_probe(machine: &MachineInfo, sample: &SystemSample) {
     println!("macvmtop probe");
+    println!("  machine name:       {}", machine.machine_name);
     println!("  model:              {}", machine.model);
     println!("  cpu:                {}", machine.cpu_brand);
     println!("  kernel:             {}", machine.os_release);
@@ -202,10 +205,10 @@ fn draw_frame(
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(4),
+            Constraint::Length(5),
             Constraint::Length(4),
             Constraint::Length(6),
-            Constraint::Min(10),
+            Constraint::Min(9),
         ])
         .split(size);
 
@@ -236,7 +239,7 @@ fn draw_frame(
 fn draw_tiny_notice(frame: &mut Frame<'_>, area: Rect) {
     let lines = vec![
         Line::from(Span::styled(
-            "macvmtop",
+            format!("macvmtop {VERSION}"),
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
@@ -270,7 +273,7 @@ fn draw_compact_frame(
     let lines = vec![
         Line::from(vec![
             Span::styled(
-                "macvmtop",
+                app_label(machine),
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
@@ -320,11 +323,11 @@ fn draw_narrow_frame(
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(4),
+            Constraint::Length(5),
             Constraint::Length(4),
             Constraint::Length(5),
             Constraint::Length(5),
-            Constraint::Min(6),
+            Constraint::Min(5),
         ])
         .split(area);
 
@@ -350,18 +353,22 @@ fn draw_header(
     let lines = vec![
         Line::from(vec![
             Span::styled(
-                "macvmtop",
+                format!("macvmtop {VERSION}"),
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
             ),
             Span::raw(format!(
                 "  {}  {}  {} vCPU  {}",
-                machine.model, machine.cpu_brand, machine.logical_cpus, guest
+                truncate(&machine.machine_name, 24),
+                machine.model,
+                machine.logical_cpus,
+                guest
             )),
         ]),
         Line::from(format!(
-            "uptime {}   load {:.2} {:.2} {:.2}   sample {} ms",
+            "{}  uptime {}   load {:.2} {:.2} {:.2}   sample {} ms",
+            machine.cpu_brand,
             duration(sample.uptime_seconds),
             sample.load_average[0],
             sample.load_average[1],
@@ -382,6 +389,13 @@ fn draw_header(
         Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title("system")),
         area,
     );
+}
+
+fn app_label(machine: &MachineInfo) -> String {
+    format!(
+        "macvmtop {VERSION}  {}",
+        truncate(&machine.machine_name, 24)
+    )
 }
 
 fn draw_gauges(frame: &mut Frame<'_>, area: Rect, sample: &SystemSample) {
@@ -695,7 +709,8 @@ fn render_text(
 ) -> Result<()> {
     writeln!(
         out,
-        "macvmtop  {}  {}  {} vCPU  uptime {}",
+        "macvmtop {VERSION}  {}  {}  {}  {} vCPU  uptime {}",
+        machine.machine_name,
         machine.model,
         machine.cpu_brand,
         machine.logical_cpus,

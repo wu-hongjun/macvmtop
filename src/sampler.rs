@@ -203,6 +203,10 @@ impl Sampler {
 }
 
 pub fn machine_info() -> MachineInfo {
+    let machine_name = darwin::sysctl_string("kern.hostname")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "unknown".to_string());
     let model = darwin::sysctl_string("hw.model").unwrap_or_else(|_| "unknown".to_string());
     let cpu_brand =
         darwin::sysctl_string("machdep.cpu.brand_string").unwrap_or_else(|_| "unknown".to_string());
@@ -225,6 +229,7 @@ pub fn machine_info() -> MachineInfo {
         || kernel_version.contains("VMAPPLE");
 
     MachineInfo {
+        machine_name,
         model,
         cpu_brand,
         kernel_version,
@@ -248,7 +253,7 @@ pub fn available_metrics() -> Vec<AvailableMetric> {
     vec![
         AvailableMetric {
             metric: "VM identity",
-            source: "sysctl kern.version, kern.osrelease, hw.model, machdep.cpu.brand_string",
+            source: "sysctl kern.hostname, kern.version, kern.osrelease, hw.model, machdep.cpu.brand_string",
             note: "guest-visible identity; VM detection is based on reported model/kernel strings",
         },
         AvailableMetric {

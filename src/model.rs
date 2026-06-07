@@ -2,6 +2,7 @@ use serde::Serialize;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct MachineInfo {
+    pub machine_name: String,
     pub model: String,
     pub cpu_brand: String,
     pub kernel_version: String,

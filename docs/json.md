@@ -11,14 +11,15 @@ macvmtop json
 
 This returns:
 
-- `machine`: guest-reported model, CPU, kernel, CPU counts, memory, and VM
-  detection
+- `machine`: guest-reported name, model, CPU, kernel, CPU counts, memory, and
+  VM detection
 - `available`: metrics `macvmtop` can collect and the API source for each
 
 `machine` fields:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
+| `machine_name` | string | Guest machine name from `kern.hostname` |
 | `model` | string | Guest-reported Mac model |
 | `cpu_brand` | string | Guest-reported CPU brand |
 | `kernel_version` | string | Full Darwin kernel version |
