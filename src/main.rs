@@ -21,8 +21,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 const INSTALL_SCRIPT_URL: &str = "https://macvmtop.hongjunwu.com/install.sh";
 const FALLBACK_INSTALL_SCRIPT_URL: &str =
     "https://raw.githubusercontent.com/wu-hongjun/macvmtop/main/docs/install.sh";
-const LATEST_RELEASE_API_URL: &str =
-    "https://api.github.com/repos/wu-hongjun/macvmtop/releases/latest";
+const LATEST_RELEASE_URL: &str = "https://github.com/wu-hongjun/macvmtop/releases/latest";
 
 #[derive(Debug, Parser)]
 #[command(version, about)]
@@ -340,13 +339,11 @@ fn fetch_latest_release_tag() -> Result<Option<String>> {
     let output = ProcessCommand::new("curl")
         .args([
             "-sSL",
-            "-H",
-            "Accept: application/vnd.github+json",
-            "-H",
-            "User-Agent: macvmtop",
+            "-o",
+            "/dev/null",
             "-w",
-            "\n%{http_code}",
-            LATEST_RELEASE_API_URL,
+            "%{url_effective}\n%{http_code}",
+            LATEST_RELEASE_URL,
         ])
         .output()
         .context("run curl to check latest GitHub release")?;
@@ -358,23 +355,31 @@ fn fetch_latest_release_tag() -> Result<Option<String>> {
         );
     }
 
-    let stdout = String::from_utf8(output.stdout).context("decode GitHub release response")?;
-    let (body, status) = stdout
+    let stdout =
+        String::from_utf8(output.stdout).context("decode GitHub release check response")?;
+    let (url, status) = stdout
         .rsplit_once('\n')
-        .context("parse GitHub release response status")?;
+        .context("parse GitHub release check response status")?;
 
     match status {
         "200" => {
-            let value: serde_json::Value =
-                serde_json::from_str(body).context("parse GitHub latest release JSON")?;
-            let tag = value
-                .get("tag_name")
-                .and_then(|tag| tag.as_str())
-                .context("GitHub latest release response did not include tag_name")?;
-            Ok(Some(tag.to_string()))
+            let tag = release_tag_from_url(url)
+                .context("GitHub latest release redirect did not include a release tag")?;
+            Ok(Some(tag))
         }
         "404" => Ok(None),
         _ => bail!("GitHub latest release request returned HTTP {status}"),
+    }
+}
+
+fn release_tag_from_url(url: &str) -> Option<String> {
+    let tail = url.split("/releases/tag/").nth(1)?;
+    let tag = tail.split(['?', '#']).next()?;
+
+    if tag.is_empty() {
+        None
+    } else {
+        Some(tag.to_string())
     }
 }
 
@@ -547,5 +552,23 @@ mod tests {
         assert_eq!(compare_versions("0.2.0", "0.1.9"), Ordering::Greater);
         assert_eq!(compare_versions("1.0.0", "1.0"), Ordering::Equal);
         assert_eq!(compare_versions("v1.0.0", "1.0.1"), Ordering::Less);
+    }
+
+    #[test]
+    fn extracts_release_tag_from_github_latest_redirect() {
+        assert_eq!(
+            release_tag_from_url("https://github.com/wu-hongjun/macvmtop/releases/tag/v0.1.2"),
+            Some("v0.1.2".to_string())
+        );
+        assert_eq!(
+            release_tag_from_url(
+                "https://github.com/wu-hongjun/macvmtop/releases/tag/v0.1.2?expanded=true"
+            ),
+            Some("v0.1.2".to_string())
+        );
+        assert_eq!(
+            release_tag_from_url("https://github.com/wu-hongjun/macvmtop/releases"),
+            None
+        );
     }
 }
