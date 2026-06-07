@@ -22,11 +22,13 @@ const INSTALL_SCRIPT_URL: &str = "https://macvmtop.hongjunwu.com/install.sh";
 const FALLBACK_INSTALL_SCRIPT_URL: &str =
     "https://raw.githubusercontent.com/wu-hongjun/macvmtop/main/docs/install.sh";
 const LATEST_RELEASE_URL: &str = "https://github.com/wu-hongjun/macvmtop/releases/latest";
+const MIN_SAMPLE_INTERVAL: Duration = Duration::from_millis(100);
+const TUI_EVENT_POLL_INTERVAL: Duration = Duration::from_millis(200);
 
 #[derive(Debug, Parser)]
 #[command(version, about)]
 struct Cli {
-    /// Seconds between samples.
+    /// Seconds between samples. Defaults to 1.0.
     #[arg(short, long, default_value_t = 1.0, global = true)]
     interval: f64,
 
@@ -89,7 +91,7 @@ fn main() -> Result<()> {
     let _telemetry = init_foundations(cli.verbose)?;
     log::debug!("starting macvmtop"; "command" => ?cli.command);
 
-    let interval = Duration::from_secs_f64(cli.interval.max(0.1));
+    let interval = sample_interval(cli.interval);
     let process_filter = ProcessFilter::from_pids(cli.pids);
     let command = cli.command.unwrap_or(Command::Tui);
 
@@ -226,7 +228,7 @@ fn run_tui(interval: Duration, process_limit: usize, process_filter: &ProcessFil
         while Instant::now() < next_sample_at {
             let wait = next_sample_at
                 .saturating_duration_since(Instant::now())
-                .min(Duration::from_millis(50));
+                .min(TUI_EVENT_POLL_INTERVAL);
 
             if poll_tui_events(
                 wait,
@@ -498,6 +500,14 @@ fn print_json<T: Serialize>(value: &T, format: JsonFormat) -> Result<()> {
     Ok(())
 }
 
+fn sample_interval(seconds: f64) -> Duration {
+    if seconds.is_finite() && seconds > 0.0 {
+        Duration::from_secs_f64(seconds).max(MIN_SAMPLE_INTERVAL)
+    } else {
+        MIN_SAMPLE_INTERVAL
+    }
+}
+
 fn parse_positive_usize(value: &str) -> Result<usize, String> {
     let parsed = value
         .parse::<usize>()
@@ -570,5 +580,14 @@ mod tests {
             release_tag_from_url("https://github.com/wu-hongjun/macvmtop/releases"),
             None
         );
+    }
+
+    #[test]
+    fn clamps_sample_interval_to_minimum() {
+        assert_eq!(sample_interval(0.0), MIN_SAMPLE_INTERVAL);
+        assert_eq!(sample_interval(-1.0), MIN_SAMPLE_INTERVAL);
+        assert_eq!(sample_interval(f64::NAN), MIN_SAMPLE_INTERVAL);
+        assert_eq!(sample_interval(0.05), MIN_SAMPLE_INTERVAL);
+        assert_eq!(sample_interval(1.0), Duration::from_secs(1));
     }
 }

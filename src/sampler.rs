@@ -12,6 +12,7 @@ pub struct Sampler {
     previous_cpu: Option<Vec<CpuTicks>>,
     previous_network: HashMap<String, NetIface>,
     previous_process_cpu: HashMap<i32, u64>,
+    username_cache: HashMap<u32, String>,
     previous_instant: Option<Instant>,
 }
 
@@ -66,12 +67,28 @@ impl Sampler {
             memory.total_bytes,
             process_filter,
         );
-        processes.sort_by(|a, b| {
-            b.cpu_percent
-                .total_cmp(&a.cpu_percent)
-                .then_with(|| b.resident_bytes.cmp(&a.resident_bytes))
-        });
-        processes.truncate(process_limit);
+        select_top_processes(&mut processes, process_limit);
+        let processes = processes
+            .into_iter()
+            .map(|process| {
+                let user = self
+                    .username_cache
+                    .entry(process.uid)
+                    .or_insert_with(|| darwin::username(process.uid))
+                    .clone();
+
+                ProcessSample {
+                    pid: process.pid,
+                    user,
+                    command: process.command,
+                    cpu_percent: process.cpu_percent,
+                    memory_percent: process.memory_percent,
+                    resident_bytes: process.resident_bytes,
+                    virtual_bytes: process.virtual_bytes,
+                    threads: process.threads,
+                }
+            })
+            .collect();
 
         self.previous_cpu = Some(raw_cpu);
         self.previous_instant = Some(now);
@@ -151,7 +168,7 @@ impl Sampler {
         elapsed_secs: f64,
         total_memory_bytes: u64,
         process_filter: &ProcessFilter,
-    ) -> Vec<ProcessSample> {
+    ) -> Vec<RawProcessSample> {
         let mut next = HashMap::new();
         let mut samples = Vec::with_capacity(raw.len());
 
@@ -181,9 +198,9 @@ impl Sampler {
             };
 
             next.insert(process.pid, process.cpu_time_ns);
-            samples.push(ProcessSample {
+            samples.push(RawProcessSample {
                 pid: process.pid,
-                user: darwin::username(process.uid),
+                uid: process.uid,
                 command: if process.command.is_empty() {
                     format!("[{}]", process.pid)
                 } else {
@@ -200,6 +217,38 @@ impl Sampler {
         self.previous_process_cpu = next;
         samples
     }
+}
+
+#[derive(Clone, Debug)]
+struct RawProcessSample {
+    pid: i32,
+    uid: u32,
+    command: String,
+    cpu_percent: f64,
+    memory_percent: f64,
+    resident_bytes: u64,
+    virtual_bytes: u64,
+    threads: u64,
+}
+
+fn select_top_processes(processes: &mut Vec<RawProcessSample>, process_limit: usize) {
+    if process_limit == 0 {
+        processes.clear();
+        return;
+    }
+
+    if processes.len() > process_limit {
+        processes.select_nth_unstable_by(process_limit, compare_processes);
+        processes.truncate(process_limit);
+    }
+
+    processes.sort_by(compare_processes);
+}
+
+fn compare_processes(a: &RawProcessSample, b: &RawProcessSample) -> std::cmp::Ordering {
+    b.cpu_percent
+        .total_cmp(&a.cpu_percent)
+        .then_with(|| b.resident_bytes.cmp(&a.resident_bytes))
 }
 
 pub fn machine_info() -> MachineInfo {
@@ -431,4 +480,49 @@ fn rate(previous: Option<u64>, current: u64, elapsed_secs: f64) -> f64 {
         .and_then(|previous| current.checked_sub(previous))
         .map(|delta| delta as f64 / elapsed_secs)
         .unwrap_or(0.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn process(pid: i32, cpu_percent: f64, resident_bytes: u64) -> RawProcessSample {
+        RawProcessSample {
+            pid,
+            uid: pid as u32,
+            command: format!("process-{pid}"),
+            cpu_percent,
+            memory_percent: 0.0,
+            resident_bytes,
+            virtual_bytes: 0,
+            threads: 1,
+        }
+    }
+
+    #[test]
+    fn selects_only_top_processes_before_sorting() {
+        let mut processes = vec![
+            process(1, 1.0, 100),
+            process(2, 40.0, 100),
+            process(3, 40.0, 900),
+            process(4, 10.0, 100),
+        ];
+
+        select_top_processes(&mut processes, 2);
+
+        let pids = processes
+            .into_iter()
+            .map(|process| process.pid)
+            .collect::<Vec<_>>();
+        assert_eq!(pids, vec![3, 2]);
+    }
+
+    #[test]
+    fn zero_process_limit_skips_process_rows() {
+        let mut processes = vec![process(1, 1.0, 100)];
+
+        select_top_processes(&mut processes, 0);
+
+        assert!(processes.is_empty());
+    }
 }

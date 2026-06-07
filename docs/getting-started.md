@@ -40,6 +40,9 @@ macvmtop tui
 macvmtop live
 ```
 
+Live sampling defaults to once per second. Use `--interval <seconds>` to choose
+a faster or slower polling rate.
+
 Print one text snapshot:
 
 ```sh
@@ -106,7 +109,7 @@ In TUI mode:
 ## Global Options
 
 ```text
---interval <seconds>     Seconds between samples
+--interval <seconds>     Seconds between samples; defaults to 1.0
 --processes <count>      Number of processes to display
 --pid <PID>              Restrict sampled processes to one PID; repeatable
 --json                   Emit JSON for the once command

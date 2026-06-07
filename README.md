@@ -119,7 +119,8 @@ target/debug/macvmtop live
 
 In TUI mode, use arrows or `j`/`k` to move through processes, `/` to search,
 `Esc` to clear search, `Space` to pause or resume samples, and `q` or `Ctrl-C`
-to quit.
+to quit. Live sampling defaults to once per second; use `--interval <seconds>`
+to choose a faster or slower polling rate.
 
 One text snapshot:
 
