@@ -30,6 +30,10 @@ Install with:
 curl -fsSL https://macvmtop.hongjunwu.com/install.sh | sh
 ```
 
+GitHub Release archives are published for Apple Silicon and Intel macOS. The
+hosted installer verifies release checksums before extraction. Release binaries
+are currently ad-hoc signed, not Developer ID signed or notarized.
+
 ## Reported Metrics
 
 | Area | Source | Meaning |

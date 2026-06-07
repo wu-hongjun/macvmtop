@@ -44,6 +44,7 @@ nav:
   - Development:
       - Development Guide: development.md
       - Publishing: publishing.md
+      - Roadmap: roadmap.md
 
 markdown_extensions:
   - admonition

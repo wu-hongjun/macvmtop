@@ -60,6 +60,22 @@ append_path_to_profile() {
   } >>"$PROFILE"
 }
 
+verify_checksum() {
+  DIR="$1"
+  ASSET_NAME="$2"
+  CHECKSUM_LINE="$(grep "  $ASSET_NAME\$" "$DIR/SHA256SUMS" || true)"
+
+  if [ -z "$CHECKSUM_LINE" ]; then
+    fail "checksum file did not include $ASSET_NAME"
+  fi
+
+  if ! (cd "$DIR" && printf '%s\n' "$CHECKSUM_LINE" | shasum -a 256 -c - >/dev/null); then
+    fail "checksum verification failed for $ASSET_NAME"
+  fi
+
+  say "Verified SHA256 checksum for $ASSET_NAME"
+}
+
 offer_path_update() {
   DIR="$1"
 
@@ -114,9 +130,12 @@ mkdir -p "$INSTALL_DIR"
 
 ASSET="$BIN-$TARGET.tar.gz"
 URL="$GITHUB_BASE/releases/latest/download/$ASSET"
+CHECKSUMS_URL="$GITHUB_BASE/releases/latest/download/SHA256SUMS"
 
 if command -v curl >/dev/null 2>&1; then
   if curl -fsSL "$URL" -o "$TMP_DIR/$ASSET"; then
+    curl -fsSL "$CHECKSUMS_URL" -o "$TMP_DIR/SHA256SUMS"
+    verify_checksum "$TMP_DIR" "$ASSET"
     tar -xzf "$TMP_DIR/$ASSET" -C "$TMP_DIR"
     CANDIDATE="$TMP_DIR/$BIN"
 

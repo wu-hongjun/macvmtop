@@ -184,6 +184,16 @@ fn draw_frame(
     process_state: &ProcessTableState,
 ) {
     let size = frame.area();
+    if size.width < 40 || size.height < 10 {
+        draw_tiny_notice(frame, size);
+        return;
+    }
+
+    if size.width < 70 || size.height < 20 {
+        draw_compact_frame(frame, size, machine, sample, process_limit, process_state);
+        return;
+    }
+
     if size.width < 100 {
         draw_narrow_frame(frame, size, machine, sample, process_limit, process_state);
         return;
@@ -221,6 +231,82 @@ fn draw_frame(
     draw_network(frame, side[0], sample);
     draw_storage(frame, side[1], sample);
     draw_memory_details(frame, side[2], sample);
+}
+
+fn draw_tiny_notice(frame: &mut Frame<'_>, area: Rect) {
+    let lines = vec![
+        Line::from(Span::styled(
+            "macvmtop",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from("terminal too small"),
+        Line::from("resize, or use once/json"),
+        Line::from("q quit"),
+    ];
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(Block::default().borders(Borders::ALL).title("system"))
+            .wrap(Wrap { trim: true }),
+        area,
+    );
+}
+
+fn draw_compact_frame(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    machine: &MachineInfo,
+    sample: &SystemSample,
+    process_limit: usize,
+    process_state: &ProcessTableState,
+) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(5), Constraint::Min(5)])
+        .split(area);
+
+    let lines = vec![
+        Line::from(vec![
+            Span::styled(
+                "macvmtop",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(format!(
+                "  {}  {} vCPU",
+                machine.model, machine.logical_cpus
+            )),
+        ]),
+        Line::from(format!(
+            "CPU {:.1}%  MEM {:.1}%  load {:.2} {:.2} {:.2}",
+            sample.cpu.aggregate_percent,
+            sample.memory.pressure_percent,
+            sample.load_average[0],
+            sample.load_average[1],
+            sample.load_average[2],
+        )),
+        Line::from(format!(
+            "net {}  storage {}  {}  q quit",
+            sample.network.len(),
+            sample.storage.volumes.len(),
+            if process_state.paused {
+                "paused"
+            } else {
+                "live"
+            }
+        )),
+    ];
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(Block::default().borders(Borders::ALL).title("system"))
+            .wrap(Wrap { trim: true }),
+        chunks[0],
+    );
+    draw_processes(frame, chunks[1], sample, process_limit, process_state);
 }
 
 fn draw_narrow_frame(

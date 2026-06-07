@@ -13,6 +13,8 @@ The script supports macOS guests on Apple Silicon and Intel Macs.
 Install behavior:
 
 - It first tries to install a prebuilt release archive from GitHub Releases.
+- It verifies the archive against the release `SHA256SUMS` file before
+  extracting it.
 - If no release archive exists for the current architecture, it falls back to
   `cargo install --git https://github.com/wu-hongjun/macvmtop.git --locked`.
 - The source-install fallback requires Rust and Cargo.
@@ -35,6 +37,13 @@ Cargo fallback installs to Cargo's configured binary directory, usually:
 
 Set `MACVMTOP_NO_PATH_PROMPT=1` to make the installer print PATH guidance
 without prompting.
+
+!!! note "Signing Status"
+
+    Release binaries are currently ad-hoc signed, not Developer ID signed or
+    notarized. Command-line installs through the hosted installer work, but
+    manual browser downloads may still encounter Gatekeeper friction. Developer
+    ID signing and notarization are tracked as future distribution work.
 
 ## Build From Source
 

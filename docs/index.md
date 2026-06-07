@@ -56,5 +56,6 @@ macvmtop json --sample --count 5 --interval 1 --processes 10
 ## Project Status
 
 The current build is a working early Rust implementation. The TUI, one-shot
-text output, and JSON output are implemented. Release artifacts and package
-publishing are still being prepared.
+text output, and JSON output are implemented. GitHub Release archives are
+published for Apple Silicon and Intel macOS guests, and the hosted installer
+downloads and verifies those archives.

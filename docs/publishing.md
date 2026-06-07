@@ -100,6 +100,19 @@ macvmtop-x86_64-apple-darwin.tar.gz
 The release workflow can also be started manually from the Actions tab with an
 existing tag.
 
+Current release binaries are ad-hoc signed by the linker and are not Developer
+ID signed or notarized. `spctl --assess --type execute` rejects the current
+release binaries. Shipping Developer ID signed binaries requires Apple
+Developer Program credentials and a notarization step in the release workflow.
+
+When signing is added, the release workflow should:
+
+- import a Developer ID Application certificate from GitHub Actions secrets
+- sign each target binary before packaging
+- submit the signed archives or binaries to Apple notarization
+- staple notarization tickets where applicable
+- keep publishing `SHA256SUMS` for installer verification
+
 ## Reference Checkouts
 
 The local reference repositories under `references/` are research inputs. They
