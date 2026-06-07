@@ -70,3 +70,6 @@ This runs the same hosted installer:
 ```sh
 curl -fsSL https://macvmtop.hongjunwu.com/install.sh | sh
 ```
+
+If the custom-domain installer is temporarily unavailable, `macvmtop update`
+falls back to the install script in the GitHub repository.

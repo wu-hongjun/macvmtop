@@ -76,8 +76,8 @@ checkouts or generated build output.
 Version tags create GitHub Releases automatically:
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
 The release workflow is defined in:

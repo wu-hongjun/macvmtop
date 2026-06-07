@@ -78,8 +78,8 @@ Run the full local publish-readiness checks:
 Push a version tag to build macOS release archives and create a GitHub Release:
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
 The project uses the published `foundations = 5.7.2` crate for service metadata

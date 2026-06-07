@@ -12,12 +12,15 @@ use render::{ProcessTableState, Tui};
 use sampler::{ProcessFilter, Sampler, machine_info, system_info_report};
 use serde::Serialize;
 use std::cmp::Ordering;
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::process::Command as ProcessCommand;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const INSTALL_SCRIPT_URL: &str = "https://macvmtop.hongjunwu.com/install.sh";
+const FALLBACK_INSTALL_SCRIPT_URL: &str =
+    "https://raw.githubusercontent.com/wu-hongjun/macvmtop/main/docs/install.sh";
 const LATEST_RELEASE_API_URL: &str =
     "https://api.github.com/repos/wu-hongjun/macvmtop/releases/latest";
 
@@ -276,25 +279,61 @@ fn run_check_update() -> Result<()> {
 }
 
 fn run_update(install_dir: Option<PathBuf>) -> Result<()> {
-    println!("Running macvmtop installer from {INSTALL_SCRIPT_URL}");
+    println!("Downloading macvmtop installer from {INSTALL_SCRIPT_URL}");
+    let script_path = temporary_installer_path();
+    let script_url = match download_installer(INSTALL_SCRIPT_URL, &script_path) {
+        Ok(()) => INSTALL_SCRIPT_URL,
+        Err(primary_error) => {
+            eprintln!("primary installer download failed: {primary_error}");
+            eprintln!("falling back to {FALLBACK_INSTALL_SCRIPT_URL}");
+            download_installer(FALLBACK_INSTALL_SCRIPT_URL, &script_path)?;
+            FALLBACK_INSTALL_SCRIPT_URL
+        }
+    };
 
     let mut command = ProcessCommand::new("sh");
-    command
-        .arg("-c")
-        .arg(format!("curl -fsSL {INSTALL_SCRIPT_URL} | sh"));
+    command.arg(&script_path);
 
     if let Some(install_dir) = install_dir {
         command.env("MACVMTOP_INSTALL_DIR", install_dir);
     }
 
-    let status = command
-        .status()
-        .context("run macvmtop installer through sh")?;
+    println!("Running installer from {script_url}");
+    let status = command.status().context("run macvmtop installer")?;
+    let _ = fs::remove_file(&script_path);
+
     if !status.success() {
         bail!("installer exited with {status}");
     }
 
     Ok(())
+}
+
+fn download_installer(url: &str, path: &Path) -> Result<()> {
+    let output = ProcessCommand::new("curl")
+        .args(["-fsSL", "-o"])
+        .arg(path)
+        .arg(url)
+        .output()
+        .with_context(|| format!("download installer from {url}"))?;
+
+    if !output.status.success() {
+        bail!(
+            "curl exited with {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+
+    Ok(())
+}
+
+fn temporary_installer_path() -> PathBuf {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    std::env::temp_dir().join(format!("macvmtop-install-{}-{now}.sh", std::process::id()))
 }
 
 fn fetch_latest_release_tag() -> Result<Option<String>> {
