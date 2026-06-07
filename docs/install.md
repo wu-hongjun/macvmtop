@@ -16,6 +16,9 @@ Install behavior:
 - If no release archive exists for the current architecture, it falls back to
   `cargo install --git https://github.com/wu-hongjun/macvmtop.git --locked`.
 - The source-install fallback requires Rust and Cargo.
+- After installing, it checks whether the install directory is on `PATH`. If it
+  is not, the installer prints the shell profile line to add and, when running
+  interactively, offers to append it for you.
 
 Set `MACVMTOP_INSTALL_DIR` to choose the install directory for prebuilt release
 archives:
@@ -29,6 +32,9 @@ Cargo fallback installs to Cargo's configured binary directory, usually:
 ```text
 ~/.cargo/bin
 ```
+
+Set `MACVMTOP_NO_PATH_PROMPT=1` to make the installer print PATH guidance
+without prompting.
 
 ## Build From Source
 

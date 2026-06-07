@@ -15,6 +15,87 @@ fail() {
   exit 1
 }
 
+path_contains() {
+  case ":$PATH:" in
+    *":$1:"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+shell_name() {
+  basename "${SHELL:-sh}"
+}
+
+path_profile() {
+  case "$(shell_name)" in
+    zsh) printf '%s\n' "$HOME/.zshrc" ;;
+    bash) printf '%s\n' "$HOME/.bash_profile" ;;
+    fish) printf '%s\n' "$HOME/.config/fish/config.fish" ;;
+    *) printf '%s\n' "$HOME/.profile" ;;
+  esac
+}
+
+path_export_line() {
+  case "$(shell_name)" in
+    fish) printf 'fish_add_path -U %s\n' "$1" ;;
+    *) printf 'export PATH="%s:$PATH"\n' "$1" ;;
+  esac
+}
+
+append_path_to_profile() {
+  PROFILE="$1"
+  DIR="$2"
+
+  mkdir -p "$(dirname "$PROFILE")"
+  touch "$PROFILE"
+
+  if grep -F "$DIR" "$PROFILE" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  {
+    printf '\n'
+    printf '# Added by macvmtop installer\n'
+    path_export_line "$DIR"
+  } >>"$PROFILE"
+}
+
+offer_path_update() {
+  DIR="$1"
+
+  if path_contains "$DIR"; then
+    say "$DIR is already on PATH."
+    return 0
+  fi
+
+  PROFILE="$(path_profile)"
+  say "$DIR is not on PATH."
+  say "To use macvmtop from a new shell, add this to $PROFILE:"
+  say "  $(path_export_line "$DIR")"
+
+  if [ "${MACVMTOP_NO_PATH_PROMPT:-}" = "1" ]; then
+    return 0
+  fi
+
+  if [ -r /dev/tty ] && [ -w /dev/tty ]; then
+    printf 'Add macvmtop to PATH in %s now? [y/N] ' "$PROFILE" >/dev/tty
+    IFS= read -r ANSWER </dev/tty || ANSWER=""
+    case "$ANSWER" in
+      y | Y | yes | YES)
+        append_path_to_profile "$PROFILE" "$DIR"
+        say "Updated $PROFILE."
+        say "Restart your shell, or run this now:"
+        say "  $(path_export_line "$DIR")"
+        ;;
+      *)
+        say "Skipped PATH update."
+        ;;
+    esac
+  else
+    say "No interactive terminal is available, so the installer did not edit your shell profile."
+  fi
+}
+
 case "$(uname -s)" in
   Darwin) ;;
   *) fail "macvmtop currently supports macOS only" ;;
@@ -46,7 +127,7 @@ if command -v curl >/dev/null 2>&1; then
     if [ -n "$CANDIDATE" ] && [ -f "$CANDIDATE" ]; then
       install -m 0755 "$CANDIDATE" "$INSTALL_DIR/$BIN"
       say "macvmtop installed to $INSTALL_DIR/$BIN"
-      say "Add $INSTALL_DIR to PATH if it is not already there."
+      offer_path_update "$INSTALL_DIR"
       exit 0
     fi
 
@@ -63,4 +144,4 @@ fi
 cargo install --git "$GITHUB_BASE.git" --locked --force "$BIN"
 
 say "macvmtop installed with cargo."
-say "Add $HOME/.cargo/bin to PATH if it is not already there."
+offer_path_update "$HOME/.cargo/bin"

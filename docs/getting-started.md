@@ -6,9 +6,9 @@
 curl -fsSL https://macvmtop.hongjunwu.com/install.sh | sh
 ```
 
-The install script prefers prebuilt GitHub Release archives. Until release
-archives are published, it falls back to `cargo install --git` and requires a
-working Rust toolchain.
+The install script downloads the prebuilt GitHub Release archive for your macOS
+architecture. If the install directory is not on `PATH`, it prints the shell
+profile line to add and offers to append it when running interactively.
 
 ## Build From Source
 

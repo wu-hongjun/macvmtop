@@ -18,8 +18,7 @@ The current build has three useful modes:
 
 The default command is `tui`.
 
-Public documentation lives in `docs/` and is built with MkDocs. After GitHub
-Pages is enabled for GitHub Actions, it will be served from:
+Public documentation lives in `docs/`, is built with MkDocs, and is served from:
 
 ```text
 https://macvmtop.hongjunwu.com/
