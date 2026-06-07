@@ -11,7 +11,7 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Cell, Gauge, Paragraph, Row, Table, TableState, Wrap};
+use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState, Wrap};
 use std::io::{self, Stdout, Write};
 
 pub struct Tui {
@@ -203,7 +203,7 @@ fn draw_frame(
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(4),
-            Constraint::Length(5),
+            Constraint::Length(4),
             Constraint::Length(6),
             Constraint::Min(10),
         ])
@@ -321,7 +321,7 @@ fn draw_narrow_frame(
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(4),
-            Constraint::Length(5),
+            Constraint::Length(4),
             Constraint::Length(5),
             Constraint::Length(5),
             Constraint::Min(6),
@@ -390,26 +390,51 @@ fn draw_gauges(frame: &mut Frame<'_>, area: Rect, sample: &SystemSample) {
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(area);
 
-    let cpu_percent = percent(sample.cpu.aggregate_percent);
-    let cpu = Gauge::default()
-        .block(Block::default().borders(Borders::ALL).title("CPU"))
-        .gauge_style(Style::default().fg(Color::Green))
-        .percent(cpu_percent)
-        .label(format!("{:.1}% guest vCPU", sample.cpu.aggregate_percent));
-    frame.render_widget(cpu, chunks[0]);
-
     let mem = &sample.memory;
-    let memory = Gauge::default()
-        .block(Block::default().borders(Borders::ALL).title("Memory"))
-        .gauge_style(Style::default().fg(Color::Yellow))
-        .percent(percent(mem.pressure_percent))
-        .label(format!(
+    draw_meter(
+        frame,
+        chunks[0],
+        "CPU",
+        sample.cpu.aggregate_percent,
+        format!("{:.1}% guest vCPU", sample.cpu.aggregate_percent),
+        Color::Green,
+    );
+    draw_meter(
+        frame,
+        chunks[1],
+        "Memory",
+        mem.pressure_percent,
+        format!(
             "{:.1}%  {} / {}",
             mem.pressure_percent,
             bytes(mem.used_bytes),
             bytes(mem.total_bytes)
-        ));
-    frame.render_widget(memory, chunks[1]);
+        ),
+        Color::Yellow,
+    );
+}
+
+fn draw_meter(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    title: &'static str,
+    percent: f64,
+    label: String,
+    color: Color,
+) {
+    let inner_width = area.width.saturating_sub(2) as usize;
+    let lines = vec![
+        Line::from(truncate(&label, inner_width)),
+        Line::from(Span::styled(
+            mini_bar(percent, inner_width),
+            Style::default().fg(color).add_modifier(Modifier::BOLD),
+        )),
+    ];
+
+    frame.render_widget(
+        Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title(title)),
+        area,
+    );
 }
 
 fn draw_cores(frame: &mut Frame<'_>, area: Rect, sample: &SystemSample) {
@@ -784,10 +809,6 @@ fn render_text(
     Ok(())
 }
 
-fn percent(value: f64) -> u16 {
-    value.clamp(0.0, 100.0).round() as u16
-}
-
 fn ascii_bar(percent: f64, width: usize) -> String {
     let clamped = percent.clamp(0.0, 100.0);
     let filled = ((clamped / 100.0) * width as f64).round() as usize;
@@ -853,11 +874,34 @@ fn duration(seconds: u64) -> String {
 fn truncate(value: &str, max_chars: usize) -> String {
     if value.chars().count() <= max_chars {
         value.to_string()
+    } else if max_chars <= 3 {
+        ".".repeat(max_chars)
     } else {
         value
             .chars()
             .take(max_chars.saturating_sub(3))
             .collect::<String>()
             + "..."
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{mini_bar, truncate};
+
+    #[test]
+    fn mini_bar_respects_requested_width() {
+        assert_eq!(mini_bar(50.0, 0), "");
+        assert_eq!(mini_bar(50.0, 4), "##..");
+        assert_eq!(mini_bar(150.0, 3), "###");
+    }
+
+    #[test]
+    fn truncate_never_exceeds_requested_width() {
+        assert_eq!(truncate("abcdef", 0), "");
+        assert_eq!(truncate("abcdef", 2), "..");
+        assert_eq!(truncate("abcdef", 3), "...");
+        assert_eq!(truncate("abcdef", 4), "a...");
+        assert_eq!(truncate("abc", 4), "abc");
     }
 }
