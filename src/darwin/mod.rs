@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, anyhow};
 use libc::{c_char, c_int, c_uint, c_ulonglong};
 use std::ffi::{CStr, CString};
-use std::mem;
+use std::mem::{self, MaybeUninit};
 use std::ptr;
 
 const MAX_CPUS: usize = 256;
@@ -136,11 +136,26 @@ pub struct VolumeInfo {
 pub struct ProcessInfo {
     pub pid: i32,
     pub uid: u32,
-    pub command: String,
+    pub command: ProcessCommand,
     pub cpu_time_ns: u64,
     pub resident_bytes: u64,
     pub virtual_bytes: u64,
     pub threads: u64,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ProcessCommand([c_char; 256]);
+
+impl Default for ProcessCommand {
+    fn default() -> Self {
+        Self([0; 256])
+    }
+}
+
+impl ProcessCommand {
+    pub fn text(&self) -> String {
+        c_char_array_to_string(&self.0)
+    }
 }
 
 unsafe extern "C" {
@@ -164,12 +179,11 @@ unsafe extern "C" {
 }
 
 pub fn cpu_load() -> Result<Vec<CpuTicks>> {
-    let mut out = vec![CpuTicks::default(); MAX_CPUS];
+    let mut out: Vec<MaybeUninit<CpuTicks>> = Vec::with_capacity(MAX_CPUS);
     let mut count: c_uint = 0;
-    let rc = unsafe { macvmtop_cpu_load(out.as_mut_ptr(), MAX_CPUS as c_uint, &mut count) };
+    let rc = unsafe { macvmtop_cpu_load(out.as_mut_ptr().cast(), MAX_CPUS as c_uint, &mut count) };
     ensure_native_ok("macvmtop_cpu_load", rc)?;
-    out.truncate(count as usize);
-    Ok(out)
+    unsafe { assume_init_vec(out, count as usize, MAX_CPUS) }
 }
 
 pub fn vm_stats() -> Result<VmStats> {
@@ -180,16 +194,20 @@ pub fn vm_stats() -> Result<VmStats> {
 }
 
 pub fn network_interfaces() -> Result<Vec<NetIface>> {
-    let mut out = vec![NativeNetIface::default(); MAX_INTERFACES];
+    let mut out: Vec<MaybeUninit<NativeNetIface>> = Vec::with_capacity(MAX_INTERFACES);
     let mut count: c_uint = 0;
     let rc = unsafe {
-        macvmtop_network_interfaces(out.as_mut_ptr(), MAX_INTERFACES as c_uint, &mut count)
+        macvmtop_network_interfaces(
+            out.as_mut_ptr().cast(),
+            MAX_INTERFACES as c_uint,
+            &mut count,
+        )
     };
     ensure_native_ok("macvmtop_network_interfaces", rc)?;
+    let out = unsafe { assume_init_vec(out, count as usize, MAX_INTERFACES) }?;
 
     Ok(out
         .into_iter()
-        .take(count as usize)
         .map(|iface| NetIface {
             name: c_char_array_to_string(&iface.name),
             rx_bytes: iface.rx_bytes,
@@ -201,15 +219,16 @@ pub fn network_interfaces() -> Result<Vec<NetIface>> {
 }
 
 pub fn storage_volumes() -> Result<Vec<VolumeInfo>> {
-    let mut out = vec![NativeVolume::default(); MAX_VOLUMES];
+    let mut out: Vec<MaybeUninit<NativeVolume>> = Vec::with_capacity(MAX_VOLUMES);
     let mut count: c_uint = 0;
-    let rc =
-        unsafe { macvmtop_storage_volumes(out.as_mut_ptr(), MAX_VOLUMES as c_uint, &mut count) };
+    let rc = unsafe {
+        macvmtop_storage_volumes(out.as_mut_ptr().cast(), MAX_VOLUMES as c_uint, &mut count)
+    };
     ensure_native_ok("macvmtop_storage_volumes", rc)?;
+    let out = unsafe { assume_init_vec(out, count as usize, MAX_VOLUMES) }?;
 
     Ok(out
         .into_iter()
-        .take(count as usize)
         .map(|volume| VolumeInfo {
             mount_path: c_char_array_to_string(&volume.mount_path),
             mounted_from: c_char_array_to_string(&volume.mounted_from),
@@ -227,18 +246,19 @@ pub fn storage_volumes() -> Result<Vec<VolumeInfo>> {
 }
 
 pub fn processes() -> Result<Vec<ProcessInfo>> {
-    let mut out = vec![NativeProcess::default(); MAX_PROCESSES];
+    let mut out: Vec<MaybeUninit<NativeProcess>> = Vec::with_capacity(MAX_PROCESSES);
     let mut count: c_uint = 0;
-    let rc = unsafe { macvmtop_processes(out.as_mut_ptr(), MAX_PROCESSES as c_uint, &mut count) };
+    let rc =
+        unsafe { macvmtop_processes(out.as_mut_ptr().cast(), MAX_PROCESSES as c_uint, &mut count) };
     ensure_native_ok("macvmtop_processes", rc)?;
+    let out = unsafe { assume_init_vec(out, count as usize, MAX_PROCESSES) }?;
 
     Ok(out
         .into_iter()
-        .take(count as usize)
         .map(|proc| ProcessInfo {
             pid: proc.pid,
             uid: proc.uid,
-            command: c_char_array_to_string(&proc.command),
+            command: ProcessCommand(proc.command),
             cpu_time_ns: proc.cpu_time_ns,
             resident_bytes: proc.resident_bytes,
             virtual_bytes: proc.virtual_bytes,
@@ -357,6 +377,27 @@ fn ensure_native_ok(function: &str, rc: c_int) -> Result<()> {
         Ok(())
     } else {
         Err(anyhow!("{function} failed with native error code {rc}"))
+    }
+}
+
+unsafe fn assume_init_vec<T>(
+    mut values: Vec<MaybeUninit<T>>,
+    len: usize,
+    max_len: usize,
+) -> Result<Vec<T>> {
+    if len > max_len || len > values.capacity() {
+        return Err(anyhow!(
+            "native call returned {len} rows for capacity {max_len}"
+        ));
+    }
+
+    // Native collectors fully initialize the first `len` slots before returning success.
+    unsafe {
+        values.set_len(len);
+        let ptr = values.as_mut_ptr().cast::<T>();
+        let capacity = values.capacity();
+        mem::forget(values);
+        Ok(Vec::from_raw_parts(ptr, len, capacity))
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::darwin::{self, CpuTicks, NetIface, ProcessInfo, VmStats, VolumeInfo};
+use crate::darwin::{self, CpuTicks, NetIface, ProcessCommand, ProcessInfo, VmStats, VolumeInfo};
 use crate::model::{
     AvailableMetric, CpuCoreSample, CpuSample, MachineInfo, MemorySample, NetworkSample,
     ProcessSample, StorageSample, SystemInfoReport, SystemSample, VolumeSample,
@@ -80,7 +80,7 @@ impl Sampler {
                 ProcessSample {
                     pid: process.pid,
                     user,
-                    command: process.command,
+                    command: process.command_text(),
                     cpu_percent: process.cpu_percent,
                     memory_percent: process.memory_percent,
                     resident_bytes: process.resident_bytes,
@@ -201,11 +201,7 @@ impl Sampler {
             samples.push(RawProcessSample {
                 pid: process.pid,
                 uid: process.uid,
-                command: if process.command.is_empty() {
-                    format!("[{}]", process.pid)
-                } else {
-                    process.command
-                },
+                command: process.command,
                 cpu_percent,
                 memory_percent,
                 resident_bytes: process.resident_bytes,
@@ -223,12 +219,23 @@ impl Sampler {
 struct RawProcessSample {
     pid: i32,
     uid: u32,
-    command: String,
+    command: ProcessCommand,
     cpu_percent: f64,
     memory_percent: f64,
     resident_bytes: u64,
     virtual_bytes: u64,
     threads: u64,
+}
+
+impl RawProcessSample {
+    fn command_text(&self) -> String {
+        let command = self.command.text();
+        if command.is_empty() {
+            format!("[{}]", self.pid)
+        } else {
+            command
+        }
+    }
 }
 
 fn select_top_processes(processes: &mut Vec<RawProcessSample>, process_limit: usize) {
@@ -490,7 +497,7 @@ mod tests {
         RawProcessSample {
             pid,
             uid: pid as u32,
-            command: format!("process-{pid}"),
+            command: ProcessCommand::default(),
             cpu_percent,
             memory_percent: 0.0,
             resident_bytes,
