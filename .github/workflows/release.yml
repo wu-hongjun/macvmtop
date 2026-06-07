@@ -1,0 +1,145 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing version tag to release, for example v0.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: macos-latest
+
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Resolve version tag
+        id: version
+        run: |
+          set -eu
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          expected="v${version}"
+
+          if [ "$tag" != "$expected" ]; then
+            echo "Release tag $tag does not match Cargo.toml version $version; expected $expected" >&2
+            exit 1
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup default stable
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Check build
+        run: cargo check --locked
+
+      - name: Run tests
+        run: cargo test --locked
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features --locked -- -D warnings
+
+  build:
+    runs-on: macos-latest
+    needs: validate
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - aarch64-apple-darwin
+          - x86_64-apple-darwin
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+
+      - name: Install Rust target
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add "${{ matrix.target }}"
+
+      - name: Build release binary
+        run: cargo build --locked --release --target "${{ matrix.target }}"
+
+      - name: Package archive
+        run: |
+          set -eu
+          target="${{ matrix.target }}"
+          asset="macvmtop-${target}.tar.gz"
+
+          mkdir -p "dist" "pkg"
+          cp "target/${target}/release/macvmtop" "pkg/macvmtop"
+          cp "README.md" "LICENSE" "pkg/"
+          tar -czf "dist/${asset}" -C "pkg" .
+          shasum -a 256 "dist/${asset}" > "dist/${asset}.sha256"
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macvmtop-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    runs-on: ubuntu-latest
+    needs:
+      - validate
+      - build
+
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create combined checksums
+        run: |
+          set -eu
+          cd dist
+          sha256sum macvmtop-*.tar.gz > SHA256SUMS
+
+      - name: Write release notes
+        run: |
+          {
+            printf '%s\n' "Install macvmtop with:"
+            printf '\n'
+            printf '%s\n' '```sh'
+            printf '%s\n' 'curl -fsSL https://macvmtop.hongjunwu.com/install.sh | sh'
+            printf '%s\n' '```'
+          } > release-notes.md
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          gh release create "$TAG" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "$TAG" \
+            --notes-file release-notes.md

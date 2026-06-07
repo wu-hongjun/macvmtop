@@ -71,6 +71,35 @@ Check the package list before publishing. It should include source,
 documentation, and metadata files, and it should not include local reference
 checkouts or generated build output.
 
+## GitHub Releases
+
+Version tags create GitHub Releases automatically:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The release workflow is defined in:
+
+```text
+.github/workflows/release.yml
+```
+
+It runs on tags matching `v*.*.*`, verifies that the tag matches the version in
+`Cargo.toml`, runs the Rust checks, builds macOS release archives, writes
+checksums, and creates a GitHub Release.
+
+Release assets are named for the install script:
+
+```text
+macvmtop-aarch64-apple-darwin.tar.gz
+macvmtop-x86_64-apple-darwin.tar.gz
+```
+
+The release workflow can also be started manually from the Actions tab with an
+existing tag.
+
 ## Reference Checkouts
 
 The local reference repositories under `references/` are research inputs. They

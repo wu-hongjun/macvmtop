@@ -75,6 +75,13 @@ Run the full local publish-readiness checks:
 ~/.cargo/bin/cargo package
 ```
 
+Push a version tag to build macOS release archives and create a GitHub Release:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
 The project uses the published `foundations = 5.7.2` crate for service metadata
 and logging primitives. The local `references/foundations` checkout is only for
 research and comparison.
