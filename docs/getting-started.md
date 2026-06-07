@@ -78,6 +78,19 @@ Probe readable VM metrics:
 macvmtop probe
 ```
 
+Check for a newer published release:
+
+```sh
+macvmtop check-update
+```
+
+Update using the hosted installer:
+
+```sh
+macvmtop update
+macvmtop update --install-dir /usr/local/bin
+```
+
 ## TUI Controls
 
 In TUI mode:
@@ -107,4 +120,12 @@ In TUI mode:
 --count <count>          Number of samples to collect with --sample
 --pretty                 Print human-readable JSON
 --compact                Print compact single-line JSON
+```
+
+## Update Commands
+
+```text
+check-update            Compare this binary with the latest GitHub Release
+update                  Run the hosted install script
+update --install-dir    Override the install directory for prebuilt archives
 ```

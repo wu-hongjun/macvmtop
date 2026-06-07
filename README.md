@@ -152,6 +152,13 @@ Probe VM-visible metrics:
 target/debug/macvmtop probe
 ```
 
+Check for and install updates:
+
+```sh
+target/debug/macvmtop check-update
+target/debug/macvmtop update
+```
+
 ## JSON Output
 
 `macvmtop json` returns:

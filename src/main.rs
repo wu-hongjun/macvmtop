@@ -11,8 +11,15 @@ use foundations::telemetry::{self, TelemetryConfig, log};
 use render::{ProcessTableState, Tui};
 use sampler::{ProcessFilter, Sampler, machine_info, system_info_report};
 use serde::Serialize;
+use std::cmp::Ordering;
+use std::path::PathBuf;
+use std::process::Command as ProcessCommand;
 use std::thread;
 use std::time::{Duration, Instant};
+
+const INSTALL_SCRIPT_URL: &str = "https://macvmtop.hongjunwu.com/install.sh";
+const LATEST_RELEASE_API_URL: &str =
+    "https://api.github.com/repos/wu-hongjun/macvmtop/releases/latest";
 
 #[derive(Debug, Parser)]
 #[command(version, about)]
@@ -62,6 +69,14 @@ enum Command {
     },
     /// Probe VM-visible metrics.
     Probe,
+    /// Check whether a newer GitHub release is available.
+    CheckUpdate,
+    /// Install the latest GitHub release using the hosted installer.
+    Update {
+        /// Override the install directory used by prebuilt release archives.
+        #[arg(long, value_name = "DIR")]
+        install_dir: Option<PathBuf>,
+    },
     /// Run the live mactop-style terminal UI.
     #[command(alias = "live")]
     Tui,
@@ -92,6 +107,8 @@ fn main() -> Result<()> {
             &process_filter,
         ),
         Command::Probe => run_probe(interval, cli.processes, &process_filter),
+        Command::CheckUpdate => run_check_update(),
+        Command::Update { install_dir } => run_update(install_dir),
         Command::Tui => run_tui(interval, cli.processes, &process_filter),
     }
 }
@@ -233,6 +250,95 @@ fn run_tui(interval: Duration, process_limit: usize, process_filter: &ProcessFil
     }
 }
 
+fn run_check_update() -> Result<()> {
+    let current = env!("CARGO_PKG_VERSION");
+    let Some(latest) = fetch_latest_release_tag()? else {
+        println!("macvmtop {current}");
+        println!("No published GitHub release was found.");
+        println!("Install or update from source with: {INSTALL_SCRIPT_URL}");
+        return Ok(());
+    };
+
+    let latest_version = latest.trim_start_matches('v');
+    println!("current: {current}");
+    println!("latest:  {latest_version} ({latest})");
+
+    match compare_versions(current, latest_version) {
+        Ordering::Less => {
+            println!("update available");
+            println!("run: macvmtop update");
+        }
+        Ordering::Equal => println!("macvmtop is up to date"),
+        Ordering::Greater => println!("local version is newer than the latest published release"),
+    }
+
+    Ok(())
+}
+
+fn run_update(install_dir: Option<PathBuf>) -> Result<()> {
+    println!("Running macvmtop installer from {INSTALL_SCRIPT_URL}");
+
+    let mut command = ProcessCommand::new("sh");
+    command
+        .arg("-c")
+        .arg(format!("curl -fsSL {INSTALL_SCRIPT_URL} | sh"));
+
+    if let Some(install_dir) = install_dir {
+        command.env("MACVMTOP_INSTALL_DIR", install_dir);
+    }
+
+    let status = command
+        .status()
+        .context("run macvmtop installer through sh")?;
+    if !status.success() {
+        bail!("installer exited with {status}");
+    }
+
+    Ok(())
+}
+
+fn fetch_latest_release_tag() -> Result<Option<String>> {
+    let output = ProcessCommand::new("curl")
+        .args([
+            "-sSL",
+            "-H",
+            "Accept: application/vnd.github+json",
+            "-H",
+            "User-Agent: macvmtop",
+            "-w",
+            "\n%{http_code}",
+            LATEST_RELEASE_API_URL,
+        ])
+        .output()
+        .context("run curl to check latest GitHub release")?;
+
+    if !output.status.success() {
+        bail!(
+            "curl failed while checking latest release: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+
+    let stdout = String::from_utf8(output.stdout).context("decode GitHub release response")?;
+    let (body, status) = stdout
+        .rsplit_once('\n')
+        .context("parse GitHub release response status")?;
+
+    match status {
+        "200" => {
+            let value: serde_json::Value =
+                serde_json::from_str(body).context("parse GitHub latest release JSON")?;
+            let tag = value
+                .get("tag_name")
+                .and_then(|tag| tag.as_str())
+                .context("GitHub latest release response did not include tag_name")?;
+            Ok(Some(tag.to_string()))
+        }
+        "404" => Ok(None),
+        _ => bail!("GitHub latest release request returned HTTP {status}"),
+    }
+}
+
 fn sampled_after_interval(
     interval: Duration,
     process_limit: usize,
@@ -356,5 +462,51 @@ fn parse_positive_usize(value: &str) -> Result<usize, String> {
         Err("value must be greater than 0".to_string())
     } else {
         Ok(parsed)
+    }
+}
+
+fn compare_versions(current: &str, latest: &str) -> Ordering {
+    let current = parse_version_segments(current);
+    let latest = parse_version_segments(latest);
+
+    for idx in 0..current.len().max(latest.len()) {
+        let current = current.get(idx).copied().unwrap_or_default();
+        let latest = latest.get(idx).copied().unwrap_or_default();
+
+        match current.cmp(&latest) {
+            Ordering::Equal => {}
+            ordering => return ordering,
+        }
+    }
+
+    Ordering::Equal
+}
+
+fn parse_version_segments(version: &str) -> Vec<u64> {
+    version
+        .trim_start_matches('v')
+        .split('.')
+        .map(|segment| {
+            segment
+                .chars()
+                .take_while(|ch| ch.is_ascii_digit())
+                .collect::<String>()
+                .parse::<u64>()
+                .unwrap_or_default()
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compares_semver_like_versions() {
+        assert_eq!(compare_versions("0.1.0", "0.1.0"), Ordering::Equal);
+        assert_eq!(compare_versions("0.1.0", "0.1.1"), Ordering::Less);
+        assert_eq!(compare_versions("0.2.0", "0.1.9"), Ordering::Greater);
+        assert_eq!(compare_versions("1.0.0", "1.0"), Ordering::Equal);
+        assert_eq!(compare_versions("v1.0.0", "1.0.1"), Ordering::Less);
     }
 }

@@ -50,3 +50,23 @@ target/release/macvmtop
 macvmtop probe
 macvmtop once --interval 0.5 --processes 10
 ```
+
+## Update
+
+Check for a newer release:
+
+```sh
+macvmtop check-update
+```
+
+Update to the latest release:
+
+```sh
+macvmtop update
+```
+
+This runs the same hosted installer:
+
+```sh
+curl -fsSL https://macvmtop.hongjunwu.com/install.sh | sh
+```
