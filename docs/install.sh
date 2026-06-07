@@ -93,23 +93,28 @@ offer_path_update() {
     return 0
   fi
 
-  if [ -r /dev/tty ] && [ -w /dev/tty ]; then
-    printf 'Add macvmtop to PATH in %s now? [y/N] ' "$PROFILE" >/dev/tty
-    IFS= read -r ANSWER </dev/tty || ANSWER=""
-    case "$ANSWER" in
-      y | Y | yes | YES)
-        append_path_to_profile "$PROFILE" "$DIR"
-        say "Updated $PROFILE."
-        say "Restart your shell, or run this now:"
-        say "  $(path_export_line "$DIR")"
-        ;;
-      *)
-        say "Skipped PATH update."
-        ;;
-    esac
-  else
+  if ! printf 'Add macvmtop to PATH in %s now? [y/N] ' "$PROFILE" 2>/dev/null >/dev/tty; then
     say "No interactive terminal is available, so the installer did not edit your shell profile."
+    return 0
   fi
+
+  if ! IFS= read -r ANSWER 2>/dev/null </dev/tty; then
+    say
+    say "No interactive terminal is available, so the installer did not edit your shell profile."
+    return 0
+  fi
+
+  case "$ANSWER" in
+    y | Y | yes | YES)
+      append_path_to_profile "$PROFILE" "$DIR"
+      say "Updated $PROFILE."
+      say "Restart your shell, or run this now:"
+      say "  $(path_export_line "$DIR")"
+      ;;
+    *)
+      say "Skipped PATH update."
+      ;;
+  esac
 }
 
 case "$(uname -s)" in
