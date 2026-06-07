@@ -1,0 +1,64 @@
+site_name: macvmtop
+site_description: A Rust CLI monitor for macOS virtual machines.
+site_url: https://macvmtop.hongjunwu.com/
+repo_url: https://github.com/wu-hongjun/macvmtop
+repo_name: wu-hongjun/macvmtop
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.tabs
+    - navigation.indexes
+    - navigation.top
+    - content.code.copy
+    - navigation.tracking
+    - search.highlight
+    - search.suggest
+  palette:
+    - scheme: default
+      primary: white
+      accent: black
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: black
+      accent: white
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Roboto Mono
+
+nav:
+  - Home: index.md
+  - Guides:
+      - Installation: install.md
+      - Getting Started: getting-started.md
+      - Metrics: metrics.md
+      - JSON Output: json.md
+  - Development:
+      - Development Guide: development.md
+      - Publishing: publishing.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+plugins:
+  - search

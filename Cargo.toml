@@ -1,0 +1,28 @@
+[package]
+name = "macvmtop"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "A mactop-inspired monitor for macOS virtual machines"
+authors = ["Hongjun Wu"]
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/wu-hongjun/macvmtop"
+homepage = "https://macvmtop.hongjunwu.com/"
+documentation = "https://macvmtop.hongjunwu.com/"
+keywords = ["macos", "virtualization", "monitoring", "tui"]
+categories = ["command-line-utilities"]
+exclude = ["/references", "/target", "/site", "/.venv"]
+
+[dependencies]
+anyhow = "1.0.102"
+clap = { version = "4.6.1", features = ["derive"] }
+crossterm = "0.28.1"
+foundations = { version = "5.7.2", default-features = false, features = ["settings", "logging"] }
+libc = "0.2.186"
+ratatui = { version = "0.29.0", default-features = false, features = ["crossterm"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+
+[build-dependencies]
+cc = "1.2.61"
